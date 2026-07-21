@@ -1,18 +1,19 @@
-const redis = require('redis');
-const { promisify } = require('util');
+import redis from 'redis';
+import { promisify } from 'util';
 
 class RedisClient {
   constructor() {
-    this.client = redis.createClient();
+    this.client = redis.createClient({
+      enable_offline_queue: false,
+    });
+
+    this.client.on('error', (err) => {
+      console.log(`Redis client not connected to the server: ${err.message}`);
+    });
+
     this.getAsync = promisify(this.client.get).bind(this.client);
-
-    this.client.on('connect', () => {
-      console.log('Redis client connected to the server');
-    });
-
-    this.client.on('error', (error) => {
-      console.log('Redis client not connected to the server:', error);
-    });
+    this.setexAsync = promisify(this.client.setex).bind(this.client);
+    this.delAsync = promisify(this.client.del).bind(this.client);
   }
 
   isAlive() {
@@ -20,59 +21,30 @@ class RedisClient {
   }
 
   async get(key) {
-    try {
-      if (!key) {
-        throw new Error('Missing key');
-      }
-
-      if (typeof key !== 'string') {
-        throw new Error('Key is not a string');
-      }
-      const value = await this.getAsync(key);
-      return value;
-    } catch (err) {
-      console.error('Error', err.message);
+    if (!this.isAlive()) {
       return null;
     }
+
+    return this.getAsync(key);
   }
 
   async set(key, value, duration) {
-    try {
-      if (!key || !value || !duration) {
-        throw new Error('Missing arguments');
-      }
-
-      if (typeof key !== 'string' || typeof value !== 'string' || typeof duration !== 'number') {
-        throw new Error('Wrong argument type');
-      }
-
-      if (duration <= 0) {
-        throw new Error('Wrong duration');
-      }
-
-      await this.client.setex(key, duration, value);
-
-      console.log('Key set successfully');
-    } catch (err) {
-      console.error('Error:', err.message);
+    if (!this.isAlive()) {
+      return null;
     }
+
+    return this.setexAsync(key, duration, value);
   }
 
   async del(key) {
-    try {
-      if (!key) {
-        throw new Error('Missing key');
-      }
-
-      if (typeof key !== 'string') {
-        throw new Error('Key is not a string');
-      }
-
-      this.client.del(key);
-    } catch (err) {
-      console.error('Error', err.message);
+    if (!this.isAlive()) {
+      return null;
     }
+
+    return this.delAsync(key);
   }
 }
 
-module.exports = RedisClient;
+const redisClient = new RedisClient();
+
+export default redisClient;
