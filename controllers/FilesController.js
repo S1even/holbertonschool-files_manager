@@ -26,7 +26,7 @@ const formatFile = (file) => ({
   isPublic: file.isPublic || false,
   parentId: file.parentId && file.parentId !== '0' ? file.parentId.toString() : 0,
 });
-const withTimeout = (promise, timeout = 5000) => new Promise((resolve, reject) => {
+const withTimeout = (promise, timeout = 1000) => new Promise((resolve, reject) => {
   const timer = setTimeout(() => reject(new Error('Operation timed out')), timeout);
 
   promise
@@ -201,11 +201,13 @@ class FilesController {
       parentIdFilter = { $in: [new ObjectID(parentId), parentId] };
     }
 
-    const files = await withTimeout(dbClient.db.collection('files').aggregate([
-      { $match: { userId: user._id, parentId: parentIdFilter } },
-      { $skip: page * 20 },
-      { $limit: 20 },
-    ]).toArray());
+    const files = await withTimeout(
+      dbClient.db.collection('files')
+        .find({ userId: user._id, parentId: parentIdFilter })
+        .skip(page * 20)
+        .limit(20)
+        .toArray(),
+    );
 
     response.status(200).json(files.map((file) => formatFile(file)));
   }
