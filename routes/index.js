@@ -20,10 +20,7 @@ router.get('/connect', asyncHandler(AuthController.getConnect));
 router.get('/disconnect', asyncHandler(AuthController.getDisconnect));
 router.get('/users/me', asyncHandler(UsersController.getMe));
 router.post('/files', asyncHandler(FilesController.postUpload));
-router.put('/files/:id/publish', asyncHandler(FilesController.putPublish));
-router.put('/files/:id/unpublish', asyncHandler(FilesController.putUnpublish));
-router.get('/files/:id/data', asyncHandler(FilesController.getFile));
-router.get('/files/:id', asyncHandler(FilesController.getShow));
 router.get('/files', asyncHandler(FilesController.getIndex));
+router.get('/files/:id', asyncHandler(FilesController.getShow));
 
 export default router;
