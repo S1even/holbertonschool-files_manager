@@ -23,15 +23,24 @@ const formatFile = (file) => ({
 class FilesController {
   static async getUser(request) {
     const token = request.header('X-Token');
-    const userId = token ? await redisClient.get(`auth_${token}`) : null;
 
-    if (!userId || !ObjectID.isValid(userId)) {
+    if (!token) {
       return null;
     }
 
-    return dbClient.db.collection('users').findOne({
-      _id: new ObjectID(userId),
-    });
+    try {
+      const userId = await redisClient.get(`auth_${token}`);
+
+      if (!userId || !ObjectID.isValid(userId) || !dbClient.db) {
+        return null;
+      }
+
+      return await dbClient.db.collection('users').findOne({
+        _id: new ObjectID(userId),
+      });
+    } catch (err) {
+      return null;
+    }
   }
 
   static async postUpload(request, response) {
@@ -112,10 +121,10 @@ class FilesController {
     const result = await files.insertOne(file);
 
     if (type === 'image') {
-      await fileQueue.add({
+      fileQueue.add({
         userId: user._id.toString(),
         fileId: result.insertedId.toString(),
-      });
+      }).catch(() => {});
     }
 
     response.status(201).json(formatFile({

@@ -3,7 +3,9 @@ import { promisify } from 'util';
 
 class RedisClient {
   constructor() {
-    this.client = redis.createClient();
+    this.client = redis.createClient({
+      enable_offline_queue: false,
+    });
 
     this.client.on('error', (err) => {
       console.log(`Redis client not connected to the server: ${err.message}`);
@@ -19,14 +21,26 @@ class RedisClient {
   }
 
   async get(key) {
+    if (!this.isAlive()) {
+      return null;
+    }
+
     return this.getAsync(key);
   }
 
   async set(key, value, duration) {
+    if (!this.isAlive()) {
+      return null;
+    }
+
     return this.setexAsync(key, duration, value);
   }
 
   async del(key) {
+    if (!this.isAlive()) {
+      return null;
+    }
+
     return this.delAsync(key);
   }
 }
