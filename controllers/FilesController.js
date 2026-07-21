@@ -10,7 +10,14 @@ import redisClient from '../utils/redis.mjs'; // eslint-disable-line import/exte
 const { ObjectID } = mongodb;
 const acceptedTypes = ['folder', 'file', 'image'];
 const allowedSizes = ['500', '250', '100'];
-const fileQueue = new Bull('fileQueue');
+let fileQueue = null;
+const getFileQueue = () => {
+  if (!fileQueue) {
+    fileQueue = new Bull('fileQueue');
+  }
+
+  return fileQueue;
+};
 const formatFile = (file) => ({
   id: file._id.toString(),
   userId: file.userId.toString(),
@@ -18,6 +25,19 @@ const formatFile = (file) => ({
   type: file.type,
   isPublic: file.isPublic || false,
   parentId: file.parentId && file.parentId !== '0' ? file.parentId.toString() : 0,
+});
+const withTimeout = (promise, timeout = 5000) => new Promise((resolve, reject) => {
+  const timer = setTimeout(() => reject(new Error('Operation timed out')), timeout);
+
+  promise
+    .then((value) => {
+      clearTimeout(timer);
+      resolve(value);
+    })
+    .catch((err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
 });
 
 class FilesController {
@@ -29,15 +49,15 @@ class FilesController {
     }
 
     try {
-      const userId = await redisClient.get(`auth_${token}`);
+      const userId = await withTimeout(redisClient.get(`auth_${token}`));
 
       if (!userId || !ObjectID.isValid(userId) || !dbClient.db) {
         return null;
       }
 
-      return await dbClient.db.collection('users').findOne({
+      return await withTimeout(dbClient.db.collection('users').findOne({
         _id: new ObjectID(userId),
-      });
+      }));
     } catch (err) {
       return null;
     }
@@ -121,7 +141,7 @@ class FilesController {
     const result = await files.insertOne(file);
 
     if (type === 'image') {
-      fileQueue.add({
+      getFileQueue().add({
         userId: user._id.toString(),
         fileId: result.insertedId.toString(),
       }).catch(() => {});
@@ -181,11 +201,11 @@ class FilesController {
       parentIdFilter = { $in: [new ObjectID(parentId), parentId] };
     }
 
-    const files = await dbClient.db.collection('files').aggregate([
+    const files = await withTimeout(dbClient.db.collection('files').aggregate([
       { $match: { userId: user._id, parentId: parentIdFilter } },
       { $skip: page * 20 },
       { $limit: 20 },
-    ]).toArray();
+    ]).toArray());
 
     response.status(200).json(files.map((file) => formatFile(file)));
   }
