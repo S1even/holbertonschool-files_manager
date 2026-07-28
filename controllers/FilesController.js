@@ -1,4 +1,6 @@
 import { promises as fs } from 'fs';
+import Bull from 'bull';
+import mime from 'mime-types';
 import mongodb from 'mongodb';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -7,6 +9,15 @@ import redisClient from '../utils/redis.mjs'; // eslint-disable-line import/exte
 
 const { ObjectID } = mongodb;
 const acceptedTypes = ['folder', 'file', 'image'];
+const allowedSizes = ['500', '250', '100'];
+let fileQueue = null;
+const getFileQueue = () => {
+  if (!fileQueue) {
+    fileQueue = new Bull('fileQueue');
+  }
+
+  return fileQueue;
+};
 const formatFile = (file) => ({
   id: file._id.toString(),
   userId: file.userId.toString(),
@@ -131,6 +142,13 @@ class FilesController {
 
     const result = await files.insertOne(file);
 
+    if (type === 'image') {
+      getFileQueue().add({
+        userId: user._id.toString(),
+        fileId: result.insertedId.toString(),
+      }).catch(() => {});
+    }
+
     response.status(201).json(formatFile({
       ...file,
       _id: result.insertedId,
@@ -194,6 +212,51 @@ class FilesController {
     );
 
     response.status(200).json(files.map((file) => formatFile(file)));
+  }
+
+  static async getFile(request, response) {
+    const { id } = request.params;
+
+    if (!ObjectID.isValid(id)) {
+      response.status(404).json({ error: 'Not found' });
+      return;
+    }
+
+    const file = await dbClient.db.collection('files').findOne({
+      _id: new ObjectID(id),
+    });
+
+    if (!file) {
+      response.status(404).json({ error: 'Not found' });
+      return;
+    }
+
+    if (!file.isPublic) {
+      const user = await FilesController.getUser(request);
+
+      if (!user || file.userId.toString() !== user._id.toString()) {
+        response.status(404).json({ error: 'Not found' });
+        return;
+      }
+    }
+
+    if (file.type === 'folder') {
+      response.status(400).json({ error: "A folder doesn't have content" });
+      return;
+    }
+
+    try {
+      const { size } = request.query;
+      const localPath = allowedSizes.includes(size)
+        ? `${file.localPath}_${size}`
+        : file.localPath;
+      const data = await fs.readFile(localPath);
+      const contentType = mime.lookup(file.name) || 'application/octet-stream';
+
+      response.type(contentType).status(200).send(data);
+    } catch (err) {
+      response.status(404).json({ error: 'Not found' });
+    }
   }
 }
 
