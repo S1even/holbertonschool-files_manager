@@ -13,7 +13,9 @@ const formatFile = (file) => ({
   name: file.name,
   type: file.type,
   isPublic: file.isPublic || false,
-  parentId: file.parentId && file.parentId !== '0' ? file.parentId.toString() : 0,
+  parentId: file.parentId && file.parentId !== '0'
+  ? file.parentId.toString()
+  : file.parentId,
 });
 const withTimeout = (promise, timeout = 1000) => new Promise((resolve, reject) => {
   const timer = setTimeout(() => reject(new Error('Operation timed out')), timeout);
